@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voting System Complaint Portal with AI Assistant</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.2/firebase-firestore-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.2/firebase-storage-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@google/generative-ai"></script>
+    <style>
+        :root {
+            --primary-color: #1a73e8;
+            --secondary-color: #f8f9fa;
+            --success-color: #34a853;
+            --danger-color: #ea4335;
+            --warning-color: #fbbc05;
+            --dark-text: #202124;
+            --light-text: #5f6368;
+            --border-color: #dadce0;
+            --hover-color: #e8f0fe;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Roboto', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--secondary-color);
+            color: var(--dark-text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 32px;
+            padding: 24px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        header h1 {
+            color: var(--primary-color);
+            font-size: 2.2rem;
+            margin-bottom: 12px;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--border-color);
+            background: white;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .tab:hover {
+            background: var(--hover-color);
+        }
+
+        .tab.active {
+            border-bottom: 3px solid var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .tab-content {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+            opacity: 1;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .form-container {
+            background-color: white;
+            padding: 32px;
+            border-radius: 8px;
+            box-shadow: var(--shadow-md);
+            margin-bottom: 24px;
+        }
+
+        .form-header h2 {
+            color: var(--primary-color);
+            font-size: 1.8rem;
+            margin-bottom: 12px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--dark-text);
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+        }
+
+        textarea {
+            min-height: 140px;
+            resize: vertical;
+        }
+
+        .required::after {
+            content: " *";
+            color: var(--danger-color);
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: #0d66d0;
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            background-color: var(--light-text);
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .btn-container {
+            display: flex;
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .file-input-container {
+            position: relative;
+            margin-top: 12px;
+        }
+
+        .file-input-label {
+            display: inline-flex;
+            align-items: center;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-input-label:hover {
+            background-color: #0d66d0;
+        }
+
+        .file-name {
+            margin-top: 8px;
+            font-size: 14px;
+            color: var(--light-text);
+        }
+
+        #fileInput {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .alert {
+            padding: 16px;
+            margin-bottom: 24px;
+            border-radius: 6px;
+            display: none;
+            position: relative;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 12px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .progress-container {
+            width: 100%;
+            height: 4px;
+            background-color: var(--border-color);
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0;
+            background-color: var(--primary-color);
+            transition: width 0.3s ease;
+        }
+
+        .validation-error {
+            color: var(--danger-color);
+            font-size: 14px;
+            margin-top: 6px;
+            display: none;
+        }
+
+        .tracking-section {
+            background-color: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .tracking-form {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .tracking-form input {
+            flex: 1;
+        }
+
+        #complaintDetails {
+            margin-top: 24px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            display: none;
+        }
+
+        .status-timeline {
+            display: none;
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .timeline {
+            position: relative;
+            padding-left: 36px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 0;
+            height: 100%;
+            width: 3px;
+            background-color: var(--border-color);
+        }
+
+        .timeline-item {
+            position: relative;
+            padding-bottom: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -28px;
+            top: 0;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background-color: var(--light-text);
+            border: 3px solid white;
+            transition: all 0.3s ease;
+        }
+
+        .timeline-item.active::before {
+            background-color: var(--success-color);
+            transform: scale(1.1);
+        }
+
+        .timeline-item.canceled::before {
+            background-color: var(--danger-color);
+            transform: scale(1.1);
+        }
+
+        .timeline-title {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .timeline-date {
+            font-size: 14px;
+            color: var(--light-text);
+        }
+
+        .copy-btn {
+            margin-left: 8px;
+            padding: 4px 8px;
+            font-size: 14px;
+            background-color: var(--success-color);
+        }
+
+        .copy-btn:hover {
+            background-color: #2d8f44;
+        }
+
+        .detail-row {
+            margin-bottom: 12px;
+        }
+
+        .detail-label {
+            font-weight: 500;
+            color: var(--primary-color);
+            margin-bottom: 4px;
+        }
+
+        .detail-value {
+            color: var(--dark-text);
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status-received { background-color: #e8f0fe; color: var(--primary-color); }
+        .status-review { background-color: #fff3cd; color: var(--warning-color); }
+        .status-investigating { background-color: #d4edda; color: var(--success-color); }
+        .status-resolved { background-color: #d4edda; color: var(--success-color); }
+        .status-canceled { background-color: #f8d7da; color: var(--danger-color); }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+            }
+
+            .form-container {
+                padding: 20px;
+            }
+
+            .btn-container {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            button {
+                width: 100%;
+            }
+
+            .tabs {
+                flex-direction: column;
+            }
+
+            .tab {
+                width: 100%;
+                text-align: center;
+                border-bottom: none;
+                border-right: 3px solid transparent;
+            }
+
+            .tab.active {
+                border-right: 3px solid var(--primary-color);
+            }
+        }
+
+        /* New AI Assistant Styles */
+        .ai-assistant-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 10000;
+        }
+        .ai-assistant-button {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: var(--shadow-md);
+            border: none;
+            padding: 0;
+            transition: background 0.2s, transform 0.2s;
+        }
+        .ai-assistant-button:hover {
+            background: #0d66d0;
+            transform: scale(1.08);
+        }
+        .ai-assistant-button svg {
+            width: 32px;
+            height: 32px;
+        }
+        .ai-chat-window {
+            position: fixed;
+            bottom: 100px;
+            right: 24px;
+            width: 370px;
+            height: 520px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: var(--shadow-md);
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 10001;
+            border: 1px solid var(--border-color);
+        }
+        .ai-chat-header {
+            padding: 18px 20px;
+            background: var(--primary-color);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .ai-chat-header h3 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 500;
+        }
+        .ai-chat-header button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 28px;
+            padding: 0 8px;
+        }
+        .ai-chat-messages {
+            flex: 1;
+            padding: 18px 16px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+        .ai-message {
+            margin-bottom: 14px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            max-width: 85%;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+        .ai-message.user {
+            background: var(--primary-color);
+            color: white;
+            margin-left: auto;
+        }
+        .ai-message.assistant {
+            background: #e8f0fe;
+            color: var(--dark-text);
+        }
+        .ai-chat-input {
+            padding: 16px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 8px;
+            background: #fff;
+        }
+        .ai-chat-input input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            font-size: 15px;
+        }
+        .ai-chat-input button {
+            padding: 8px 18px;
+            border-radius: 20px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .ai-chat-input button:hover {
+            background: #0d66d0;
+        }
+        .ai-suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+            margin-bottom: 6px;
+        }
+        .ai-suggestion-chip {
+            background: var(--hover-color);
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+        .ai-suggestion-chip:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+        .ai-loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-color);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Voting System Complaint Portal</h1>
+            <p>Securely report issues with your voting experience</p>
+        </header>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="new-complaint">File New Complaint</div>
+            <div class="tab" data-tab="track-complaint">Track Complaint</div>
+        </div>
+
+        <div id="new-complaint" class="tab-content active">
+            <div class="form-container">
+                <div class="form-header">
+                    <h2>Submit Your Complaint</h2>
+                    <p>Please provide detailed information to help us resolve your issue promptly</p>
+                </div>
+
+                <div class="alert alert-success" id="successAlert">
+                    Your complaint has been submitted successfully! Your complaint ID is: 
+                    <span id="complaintId"></span>
+                    <button class="copy-btn" onclick="copyComplaintId()">Copy</button>
+                </div>
+                <div class="alert alert-danger" id="errorAlert"></div>
+
+                <form id="complaintForm">
+                    <div class="form-group">
+                        <label for="fullName" class="required">Full Name</label>
+                        <input type="text" id="fullName" name="fullName" maxlength="100" required>
+                        <div class="validation-error" id="fullNameError">Please enter your full name</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="voterId" class="required">Voter ID or Registered Email</label>
+                        <input type="text" id="voterId" name="voterId" maxlength="100" required>
+                        <div class="validation-error" id="voterIdError">Please enter a valid Voter ID or Email</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="complaintType" class="required">Complaint Type</label>
+                        <select id="complaintType" name="complaintType" required>
+                            <option value="">-- Select Complaint Type --</option>
+                            <optgroup label="Voter Identity & Access Issues">
+                                <option value="vote-already-cast">My vote was already cast by someone else</option>
+                                <option value="missing-from-list">My name is missing from the voter list</option>
+                                <option value="denied-voting">I was denied voting due to incorrect ID verification</option>
+                                <option value="no-voting-token">I received no voting token or access link</option>
+                                <option value="unable-to-login">I was unable to log in to the voting system</option>
+                            </optgroup>
+                            <optgroup label="Voting Process Issues">
+                                <option value="interface-not-working">The voting interface was not functioning properly</option>
+                                <option value="submit-error">I couldn't submit my vote — system error occurred</option>
+                                <option value="wrong-candidate">My vote went to the wrong candidate</option>
+                                <option value="no-confirmation">I didn't receive a confirmation (receipt/VVPAT) of my vote</option>
+                                <option value="not-in-blockchain">My vote is not showing in the blockchain verification record</option>
+                            </optgroup>
+                            <optgroup label="Fraud or Misuse Suspicions">
+                                <option value="vote-tampering">I suspect vote tampering or manipulation</option>
+                                <option value="credential-misuse">Someone else tried to vote using my credentials</option>
+                                <option value="multiple-votes">Multiple votes cast from one device/IP — suspicious activity</option>
+                                <option value="suspicious-behavior">Suspicious behavior observed at polling booth</option>
+                            </optgroup>
+                            <optgroup label="Polling Station Complaints">
+                                <option value="staff-bias">Polling staff were biased or misbehaving</option>
+                                <option value="accessibility-issues">No facilities for elderly or disabled voters</option>
+                                <option value="unsafe-environment">Voting environment was unsafe or intimidating</option>
+                                <option value="long-wait">Long waiting time or technical delays at the booth</option>
+                            </optgroup>
+                            <optgroup label="Technical/Platform-Related Issues">
+                                <option value="system-slow">System was too slow or crashed during voting</option>
+                                <option value="website-errors">Website/app not loading or showing errors</option>
+                                <option value="verification-failed">Biometric or OTP verification failed repeatedly</option>
+                                <option value="no-support">No help or support available during the issue</option>
+                            </optgroup>
+                            <optgroup label="Support & Follow-Up">
+                                <option value="no-response">I filed a complaint earlier but got no response</option>
+                                <option value="record-correction">I need help with a correction in my voting record</option>
+                                <option value="clarification">Need clarification on voting guidelines or errors</option>
+                            </optgroup>
+                            <option value="other">Other issue not listed above</option>
+                        </select>
+                        <div class="validation-error" id="complaintTypeError">Please select a complaint type</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="incidentDate" class="required">Date and Time of Incident</label>
+                        <input type="datetime-local" id="incidentDate" name="incidentDate" required>
+                        <div class="validation-error" id="incidentDateError">Please select a valid date and time</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="location">Location (Optional)</label>
+                        <input type="text" id="location" name="location" maxlength="200" placeholder="Polling station or online platform">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="description" class="required">Description of the Issue</label>
+                        <textarea id="description" name="description" maxlength="2000" placeholder="Please provide detailed information about your issue..." required></textarea>
+                        <div class="validation-error" id="descriptionError">Please provide a detailed description</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fileInput">Upload Evidence (Optional, max 5MB)</label>
+                        <div class="file-input-container">
+                            <label for="fileInput" class="file-input-label">Choose File</label>
+                            <input type="file" id="fileInput" name="fileInput" accept="image/*,.pdf,.doc,.docx">
+                            <div class="file-name" id="fileName">No file selected</div>
+                            <div class="progress-container" id="uploadProgress">
+                                <div class="progress-bar" id="progressBar"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="contactInfo" class="required">Contact Info for Follow-Up</label>
+                        <input type="text" id="contactInfo" name="contactInfo" maxlength="100" placeholder="Phone number or email" required>
+                        <div class="validation-error" id="contactInfoError">Please provide valid contact information</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>AI Assistance</label>
+                        <div class="ai-assist-box">
+                            <p>Not sure how to describe your issue? <button type="button" id="aiHelpBtn">Get AI Help</button></p>
+                            <div class="ai-suggestions" id="aiSuggestions"></div>
+                        </div>
+                    </div>
+
+                    <div class="btn-container">
+                        <button type="button" id="resetBtn">Reset Form</button>
+                        <button type="submit" id="submitBtn">
+                            <div class="spinner" id="submitSpinner"></div>
+                            Submit Complaint
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="track-complaint" class="tab-content">
+            <div class="tracking-section">
+                <h3>Track Your Complaint Status</h3>
+                <div class="tracking-form">
+                    <input type="text" id="trackingId" placeholder="Enter your complaint ID">
+                    <button id="trackBtn">
+                        <div class="spinner" id="trackSpinner"></div>
+                        Track
+                    </button>
+                </div>
+
+                <div id="complaintDetails">
+                    <h4>Complaint Details</h4>
+                    <div class="detail-row">
+                        <div class="detail-label">Status:</div>
+                        <div class="detail-value"><span class="status-badge" id="statusValue"></span></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Complaint Type:</div>
+                        <div class="detail-value" id="typeValue"></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Submitted On:</div>
+                        <div class="detail-value" id="dateValue"></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Description:</div>
+                        <div class="detail-value" id="descriptionValue"></div>
+                    </div>
+                    <div class="detail-row" id="resolutionNoteRow" style="display: none;">
+                        <div class="detail-label">Resolution Note:</div>
+                        <div class="detail-value" id="resolutionNoteValue"></div>
+                    </div>
+                    <div class="detail-row" id="cancellationReasonRow" style="display: none;">
+                        <div class="detail-label">Cancellation Reason:</div>
+                        <div class="detail-value" id="cancellationReasonValue"></div>
+                    </div>
+
+                    <div class="status-timeline">
+                        <h3>Status Timeline</h3>
+                        <div class="timeline">
+                            <div class="timeline-item active">
+                                <div class="timeline-title">Complaint Received</div>
+                                <div class="timeline-date" id="receivedDate"></div>
+                            </div>
+                            <div class="timeline-item" id="reviewingItem">
+                                <div class="timeline-title">Under Review</div>
+                                <div class="timeline-date" id="reviewDate">Pending</div>
+                            </div>
+                            <div class="timeline-item" id="investigatingItem">
+                                <div class="timeline-title">Investigation</div>
+                                <div class="timeline-date" id="investigateDate">Pending</div>
+                            </div>
+                            <div class="timeline-item" id="resolvedItem">
+                                <div class="timeline-title">Resolved</div>
+                                <div class="timeline-date" id="resolveDate">Pending</div>
+                            </div>
+                            <div class="timeline-item" id="canceledItem">
+                                <div class="timeline-title">Canceled</div>
+                                <div class="timeline-date" id="cancelDate">Pending</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Assistant Container -->
+    <div class="ai-assistant-container">
+        <button class="ai-assistant-button" id="aiAssistantButton" type="button" aria-label="Open AI Assistant">
+            <svg viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" fill="white" fill-opacity="0.15"/>
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+            </svg>
+        </button>
+        <div class="ai-chat-window" id="aiChatWindow">
+            <div class="ai-chat-header">
+                <h3>Voting Complaint AI Assistant</h3>
+                <button id="aiChatCloseBtn" aria-label="Close AI Assistant">×</button>
+            </div>
+            <div class="ai-chat-messages" id="aiChatMessages">
+                <div class="ai-message assistant">
+                    👋 Hi! I'm here to help you raise complaints about your voting experience. Please ask me anything related to reporting issues or complaints in the voting process. For other topics, I'll kindly let you know I can't help.
+                </div>
+            </div>
+            <div class="ai-suggestions">
+                <div class="ai-suggestion-chip">How do I file a complaint?</div>
+                <div class="ai-suggestion-chip">What information do I need to provide?</div>
+                <div class="ai-suggestion-chip">Can I upload evidence?</div>
+                <div class="ai-suggestion-chip">How do I track my complaint?</div>
+            </div>
+            <div class="ai-chat-input">
+                <input type="text" id="aiChatInput" placeholder="Type your complaint question...">
+                <button id="aiChatSendBtn">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase configuration - REPLACE WITH YOUR ACTUAL CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyDuKns6v5EOUDL-aZXMA2i6223aquQzo1E",
+            authDomain: "voter-card-scanner.firebaseapp.com",
+            databaseURL: "https://voter-card-scanner-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "voter-card-scanner",
+            storageBucket: "voter-card-scanner.firebasestorage.app",
+            messagingSenderId: "665299220821",
+            appId: "1:665299220821:web:f8025478a24f5375c697dc"
+        };
+
+        // Initialize Firebase
+        let db, storage;
+        try {
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            db = firebase.firestore();
+            storage = firebase.storage();
+            console.log('Firebase initialized successfully');
+        } catch (error) {
+            console.error('Firebase initialization failed:', error);
+            showError('Failed to connect to the database. Please try again later.');
+        }
+
+        // DOM Elements
+        const complaintForm = document.getElementById('complaintForm');
+        const resetBtn = document.getElementById('resetBtn');
+        const submitBtn = document.getElementById('submitBtn');
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const successAlert = document.getElementById('successAlert');
+        const errorAlert = document.getElementById('errorAlert');
+        const submitSpinner = document.getElementById('submitSpinner');
+        const complaintId = document.getElementById('complaintId');
+        const uploadProgress = document.getElementById('uploadProgress');
+        const progressBar = document.getElementById('progressBar');
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const trackBtn = document.getElementById('trackBtn');
+        const trackSpinner = document.getElementById('trackSpinner');
+        const trackingId = document.getElementById('trackingId');
+        const complaintDetails = document.getElementById('complaintDetails');
+        const statusTimeline = document.querySelector('.status-timeline');
+
+        // Validation Error elements
+        const validationErrors = {
+            fullName: document.getElementById('fullNameError'),
+            voterId: document.getElementById('voterIdError'),
+            complaintType: document.getElementById('complaintTypeError'),
+            incidentDate: document.getElementById('incidentDateError'),
+            description: document.getElementById('descriptionError'),
+            contactInfo: document.getElementById('contactInfoError')
+        };
+
+        // Set date constraints
+        const incidentDate = document.getElementById('incidentDate');
+        const now = new Date();
+        incidentDate.max = now.toISOString().slice(0, 16);
+        incidentDate.min = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().slice(0, 16);
+
+        // Utility functions
+        const sanitizeInput = (input) => {
+            const div = document.createElement('div');
+            div.textContent = input;
+            return div.innerHTML;
+        };
+
+        const showError = (message) => {
+            errorAlert.textContent = message;
+            errorAlert.style.display = 'block';
+            setTimeout(() => errorAlert.style.display = 'none', 5000);
+        };
+
+        const showSuccess = (message) => {
+            successAlert.textContent = message;
+            successAlert.style.display = 'block';
+        };
+
+        const hideAllValidationErrors = () => {
+            Object.values(validationErrors).forEach(error => error.style.display = 'none');
+        };
+
+        const formatDate = (date) => {
+            if (!date) return 'N/A';
+            return date.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        };
+
+        const getComplaintTypeText = (value) => {
+            const select = document.getElementById('complaintType');
+            const option = Array.from(select.options).find(opt => opt.value === value);
+            return option ? option.text : value;
+        };
+
+        const validateEmail = (email) => {
+            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        };
+
+        // Copy complaint ID
+        window.copyComplaintId = () => {
+            navigator.clipboard.writeText(complaintId.textContent)
+                .then(() => alert('Complaint ID copied to clipboard'))
+                .catch(() => alert('Failed to copy complaint ID'));
+        };
+
+        // Event Listeners
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+                
+                tab.classList.add('active');
+                document.getElementById(tab.getAttribute('data-tab')).classList.add('active');
+                
+                successAlert.style.display = 'none';
+                errorAlert.style.display = 'none';
+                complaintDetails.style.display = 'none';
+                statusTimeline.style.display = 'none';
+            });
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                if (file.size > 5 * 1024 * 1024) {
+                    showError('File size exceeds 5MB limit');
+                    e.target.value = '';
+                    fileName.textContent = 'No file selected';
+                    return;
+                }
+                fileName.textContent = file.name;
+            } else {
+                fileName.textContent = 'No file selected';
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to reset the form? All entered data will be lost.')) {
+                complaintForm.reset();
+                fileName.textContent = 'No file selected';
+                successAlert.style.display = 'none';
+                errorAlert.style.display = 'none';
+                hideAllValidationErrors();
+            }
+        });
+
+        trackBtn.addEventListener('click', async () => {
+            const id = trackingId.value.trim();
+            if (!id) {
+                showError('Please enter a complaint ID');
+                return;
+            }
+
+            if (!db) {
+                showError('Database connection not available');
+                return;
+            }
+
+            trackSpinner.style.display = 'block';
+            trackBtn.disabled = true;
+
+            try {
+                const docRef = db.collection('complaints').doc(id);
+                const doc = await docRef.get();
+
+                if (doc.exists) {
+                    const data = doc.data();
+
+                    const statusBadge = document.getElementById('statusValue');
+                    statusBadge.textContent = data.status || 'Received';
+                    statusBadge.className = `status-badge status-${data.status.toLowerCase().replace(' ', '-') || 'received'}`;
+
+                    document.getElementById('typeValue').textContent = getComplaintTypeText(data.complaintType);
+                    document.getElementById('dateValue').textContent = data.submittedAt ? formatDate(data.submittedAt.toDate()) : 'N/A';
+                    document.getElementById('descriptionValue').textContent = data.description || 'No description provided';
+
+                    document.getElementById('receivedDate').textContent = data.submittedAt ? formatDate(data.submittedAt.toDate()) : 'N/A';
+
+                    const resolutionNoteRow = document.getElementById('resolutionNoteRow');
+                    const cancellationReasonRow = document.getElementById('cancellationReasonRow');
+                    resolutionNoteRow.style.display = data.resolutionNote ? 'block' : 'none';
+                    cancellationReasonRow.style.display = data.cancellationReason ? 'block' : 'none';
+                    document.getElementById('resolutionNoteValue').textContent = data.resolutionNote || 'N/A';
+                    document.getElementById('cancellationReasonValue').textContent = data.cancellationReason || 'N/A';
+
+                    const timelineItems = {
+                        reviewing: document.getElementById('reviewingItem'),
+                        investigating: document.getElementById('investigatingItem'),
+                        resolved: document.getElementById('resolvedItem'),
+                        canceled: document.getElementById('canceledItem')
+                    };
+
+                    Object.values(timelineItems).forEach(item => item.classList.remove('active', 'canceled'));
+
+                    if (data.status === 'Under Review' || data.status === 'Investigating' || data.status === 'Resolved' || data.status === 'Canceled') {
+                        timelineItems.reviewing.classList.add('active');
+                        document.getElementById('reviewDate').textContent = data.reviewDate ? 
+                            formatDate(data.reviewDate.toDate()) : 'In Progress';
+                    }
+
+                    if (data.status === 'Investigating' || data.status === 'Resolved' || data.status === 'Canceled') {
+                        timelineItems.investigating.classList.add('active');
+                        document.getElementById('investigateDate').textContent = data.investigateDate ? 
+                            formatDate(data.investigateDate.toDate()) : 'In Progress';
+                    }
+
+                    if (data.status === 'Resolved') {
+                        timelineItems.resolved.classList.add('active');
+                        document.getElementById('resolveDate').textContent = data.resolveDate ? 
+                            formatDate(data.resolveDate.toDate()) : 'Completed';
+                    }
+
+                    if (data.status === 'Canceled') {
+                        timelineItems.canceled.classList.add('canceled');
+                        document.getElementById('cancelDate').textContent = data.cancelDate ? 
+                            formatDate(data.cancelDate.toDate()) : 'Canceled';
+                    }
+
+                    complaintDetails.style.display = 'block';
+                    statusTimeline.style.display = 'block';
+                } else {
+                    showError('No complaint found with that ID');
+                    complaintDetails.style.display = 'none';
+                    statusTimeline.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error tracking complaint:', error);
+                showError('An error occurred while tracking the complaint. Please try again.');
+            } finally {
+                trackSpinner.style.display = 'none';
+                trackBtn.disabled = false;
+            }
+        });
+
+        complaintForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideAllValidationErrors();
+
+            if (!db || !storage) {
+                showError('Database connection not available');
+                return;
+            }
+
+            const formData = {
+                fullName: sanitizeInput(complaintForm.fullName.value.trim()),
+                voterId: sanitizeInput(complaintForm.voterId.value.trim()),
+                complaintType: complaintForm.complaintType.value,
+                incidentDate: complaintForm.incidentDate.value,
+                location: sanitizeInput(complaintForm.location.value.trim()),
+                description: sanitizeInput(complaintForm.description.value.trim()),
+                contactInfo: sanitizeInput(complaintForm.contactInfo.value.trim())
+            };
+
+            let isValid = true;
+
+            if (!formData.fullName) {
+                validationErrors.fullName.style.display = 'block';
+                isValid = false;
+            }
+
+            if (!formData.voterId || (!validateEmail(formData.voterId) && !/^[A-Z0-9]{10}$/.test(formData.voterId))) {
+                validationErrors.voterId.style.display = 'block';
+                isValid = false;
+            }
+
+            if (!formData.complaintType) {
+                validationErrors.complaintType.style.display = 'block';
+                isValid = false;
+            }
+
+            if (!formData.incidentDate || new Date(formData.incidentDate) > new Date()) {
+                validationErrors.incidentDate.style.display = 'block';
+                isValid = false;
+            }
+
+            if (!formData.description || formData.description.length < 10) {
+                validationErrors.description.style.display = 'block';
+                isValid = false;
+            }
+
+            if (!formData.contactInfo || (!validateEmail(formData.contactInfo) && !/^\+?[\d\s-]{10,}$/.test(formData.contactInfo))) {
+                validationErrors.contactInfo.style.display = 'block';
+                isValid = false;
+            }
+
+            if (!isValid) return;
+
+            submitSpinner.style.display = 'block';
+            submitBtn.disabled = true;
+
+            try {
+                const complaintData = {
+                    ...formData,
+                    incidentDate: new Date(formData.incidentDate),
+                    status: 'Received',
+                    submittedAt: new Date(),
+                    fileUrl: null
+                };
+
+                const file = fileInput.files[0];
+                if (file) {
+                    uploadProgress.style.display = 'block';
+                    const storageRef = storage.ref();
+                    const fileRef = storageRef.child(`evidence/${Date.now()}_${sanitizeInput(file.name)}`);
+                    const uploadTask = fileRef.put(file);
+
+                    await new Promise((resolve, reject) => {
+                        uploadTask.on('state_changed',
+                            (snapshot) => {
+                                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                                progressBar.style.width = progress + '%';
+                            },
+                            (error) => reject(error),
+                            async () => {
+                                complaintData.fileUrl = await uploadTask.snapshot.ref.getDownloadURL();
+                                resolve();
+                            }
+                        );
+                    });
+                }
+
+                const docRef = await db.collection('complaints').add(complaintData);
+                complaintId.textContent = docRef.id;
+                showSuccess(`Your complaint has been submitted successfully! Your complaint ID is: ${docRef.id} The ID will sent to your phone number`);
+                complaintForm.reset();
+                fileName.textContent = 'No file selected';
+                uploadProgress.style.display = 'none';
+            } catch (error) {
+                console.error('Error submitting complaint:', error);
+                let errorMessage = 'Failed to submit complaint. Please try again.';
+                if (error.code === 'permission-denied') {
+                    errorMessage = 'Permission denied. Please ensure you have the necessary permissions.';
+                } else if (error.code === 'unavailable') {
+                    errorMessage = 'Database is currently unavailable. Please try again later.';
+                }
+                showError(errorMessage);
+            } finally {
+                submitSpinner.style.display = 'none';
+                submitBtn.disabled = false;
+                uploadProgress.style.display = 'none';
+            }
+        });
+
+        // Gemini API Integration
+        const GEMINI_API_KEY = 'AIzaSyCC-fkzBG9fBtaT3c1e_8n_yxy_E1AAUFY';
+        const genAI = new window.google.generativeai.GenerativeModel({
+            model: 'gemini-pro',
+            apiKey: GEMINI_API_KEY
+        });
+
+        // AI Assistant Functions
+        function toggleAIChat(forceOpen = null) {
+            const chatWindow = document.getElementById('aiChatWindow');
+            if (forceOpen === true) {
+                chatWindow.style.display = 'flex';
+            } else if (forceOpen === false) {
+                chatWindow.style.display = 'none';
+            } else {
+                chatWindow.style.display = (chatWindow.style.display === 'none' || chatWindow.style.display === '') ? 'flex' : 'none';
+            }
+        }
+
+        async function sendAIMessage() {
+            const input = document.getElementById('aiChatInput');
+            const message = input.value.trim();
+            if (!message) return;
+            addMessageToChat('user', message);
+            input.value = '';
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'ai-message assistant';
+            loadingDiv.innerHTML = '<div class="ai-loading"></div>';
+            document.getElementById('aiChatMessages').appendChild(loadingDiv);
+            document.getElementById('aiChatMessages').scrollTop = document.getElementById('aiChatMessages').scrollHeight;
+            try {
+                // Restrict AI to only answer voting complaint topics
+                const systemPrompt = `You are a friendly, supportive assistant for a voting complaint portal. ONLY answer questions about raising, describing, or tracking complaints in the voting process. If the user asks about anything else, politely say: 'I can only help with voting complaint topics.'`;
+                const result = await genAI.generateContent({
+                    contents: [{
+                        role: 'user',
+                        parts: [{ text: `${systemPrompt}\nUser: ${message}` }]
+                    }]
+                });
+                let response = result.response.text();
+                if (!response) response = "Sorry, I couldn't generate a response. Please try again.";
+                loadingDiv.remove();
+                addMessageToChat('assistant', response);
+            } catch (error) {
+                loadingDiv.remove();
+                addMessageToChat('assistant', 'Sorry, I encountered an error. Please try again.');
+                console.error('AI Error:', error);
+            }
+        }
+        function addMessageToChat(type, message) {
+            const messagesDiv = document.getElementById('aiChatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `ai-message ${type}`;
+            messageDiv.textContent = message;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            const chatWindow = document.getElementById('aiChatWindow');
+            const aiButton = document.getElementById('aiAssistantButton');
+            const closeButton = document.getElementById('aiChatCloseBtn');
+            const sendBtn = document.getElementById('aiChatSendBtn');
+            const input = document.getElementById('aiChatInput');
+            // Ensure chat window is hidden initially
+            chatWindow.style.display = 'none';
+            aiButton.addEventListener('click', () => toggleAIChat(true));
+            closeButton.addEventListener('click', () => toggleAIChat(false));
+            sendBtn.addEventListener('click', sendAIMessage);
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendAIMessage();
+            });
+            document.querySelectorAll('.ai-suggestion-chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    input.value = chip.textContent;
+                    sendAIMessage();
+                });
+            });
+        });
+    </script>
+</body>
+</html>
